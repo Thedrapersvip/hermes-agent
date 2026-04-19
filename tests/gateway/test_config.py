@@ -226,6 +226,24 @@ class TestLoadGatewayConfig:
 
         assert config.thread_sessions_per_user is True
 
+    def test_bridges_allow_unauthorized_groups_from_platform_yaml(self, tmp_path, monkeypatch):
+        hermes_home = tmp_path / ".hermes"
+        hermes_home.mkdir()
+        config_path = hermes_home / "config.yaml"
+        config_path.write_text(
+            "whatsapp:\n"
+            "  allow_unauthorized_groups: true\n",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.delenv("WHATSAPP_ALLOW_UNAUTHORIZED_GROUPS", raising=False)
+
+        config = load_gateway_config()
+
+        assert config.platforms[Platform.WHATSAPP].extra["allow_unauthorized_groups"] is True
+        assert __import__("os").environ["WHATSAPP_ALLOW_UNAUTHORIZED_GROUPS"] == "true"
+
     def test_thread_sessions_per_user_defaults_to_false(self, tmp_path, monkeypatch):
         hermes_home = tmp_path / ".hermes"
         hermes_home.mkdir()

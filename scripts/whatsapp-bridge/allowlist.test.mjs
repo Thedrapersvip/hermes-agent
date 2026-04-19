@@ -9,6 +9,7 @@ import {
   matchesAllowedUser,
   normalizeWhatsAppIdentifier,
   parseAllowedUsers,
+  shouldAllowIncomingSender,
 } from './allowlist.js';
 
 test('normalizeWhatsAppIdentifier strips jid syntax and plus prefix', () => {
@@ -53,6 +54,46 @@ test('matchesAllowedUser treats * as allow-all wildcard', () => {
     const allowedUsers = parseAllowedUsers('*');
     assert.equal(matchesAllowedUser('19175395595@s.whatsapp.net', allowedUsers, sessionDir), true);
     assert.equal(matchesAllowedUser('267383306489914@lid', allowedUsers, sessionDir), true);
+  } finally {
+    rmSync(sessionDir, { recursive: true, force: true });
+  }
+});
+
+test('shouldAllowIncomingSender allows unauthorized group senders when group override is enabled', () => {
+  const sessionDir = mkdtempSync(path.join(os.tmpdir(), 'hermes-wa-allowlist-'));
+
+  try {
+    const allowedUsers = parseAllowedUsers('19175395595');
+    assert.equal(
+      shouldAllowIncomingSender({
+        senderId: '267383306489914@lid',
+        chatId: '120363001234567890@g.us',
+        allowedUsers,
+        allowUnauthorizedGroups: true,
+        sessionDir,
+      }),
+      true,
+    );
+  } finally {
+    rmSync(sessionDir, { recursive: true, force: true });
+  }
+});
+
+test('shouldAllowIncomingSender still blocks unauthorized private DMs when group override is enabled', () => {
+  const sessionDir = mkdtempSync(path.join(os.tmpdir(), 'hermes-wa-allowlist-'));
+
+  try {
+    const allowedUsers = parseAllowedUsers('19175395595');
+    assert.equal(
+      shouldAllowIncomingSender({
+        senderId: '267383306489914@lid',
+        chatId: '267383306489914@lid',
+        allowedUsers,
+        allowUnauthorizedGroups: true,
+        sessionDir,
+      }),
+      false,
+    );
   } finally {
     rmSync(sessionDir, { recursive: true, force: true });
   }

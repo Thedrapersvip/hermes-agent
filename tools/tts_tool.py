@@ -705,6 +705,68 @@ def _default_neutts_ref_text() -> str:
     return str(Path(__file__).parent / "neutts_samples" / "jo.txt")
 
 
+def _generate_kokoro_tts(text: str, output_path: str, tts_config: Dict[str, Any]) -> str:
+    """Generate audio using the local Kokoro ONNX TTS engine.
+
+    Kokoro outputs NumPy PCM arrays at 24 kHz. We write WAV via soundfile,
+    then optionally convert to MP3/Opus with ffmpeg.
+    """
+    try:
+        from kokoro_onnx import Kokoro
+        import soundfile as sf
+    except ImportError as e:
+        raise RuntimeError(
+            f"kokoro-onnx or soundfile not installed: {e}. "
+            "Run: pip install kokoro-onnx soundfile"
+        ) from e
+
+    kokoro_config = tts_config.get("kokoro", {})
+    base = Path.home() / "Developer" / "atlas-local" / "kokoro"
+    model_path = kokoro_config.get("model") or str(base / "kokoro-v1.0.int8.onnx")
+    voices_path = kokoro_config.get("voices") or str(base / "voices-v1.0.bin")
+    voice = kokoro_config.get("voice", "af_bella")
+    speed = float(kokoro_config.get("speed", tts_config.get("speed", 1.0)))
+    lang = kokoro_config.get("lang", "en-us")
+
+    kokoro_engine = Kokoro(model_path, voices_path)
+    audio, sample_rate = kokoro_engine.create(text, voice=voice, speed=speed, lang=lang)
+
+    if output_path.endswith(".wav"):
+        sf.write(output_path, audio, sample_rate)
+        return output_path
+
+    # Write WAV to temp file then ffmpeg-convert to target format
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        wav_path = tmp.name
+    try:
+        sf.write(wav_path, audio, sample_rate)
+        ffmpeg = shutil.which("ffmpeg")
+        if ffmpeg:
+            if output_path.endswith(".ogg"):
+                cmd = [
+                    ffmpeg, "-i", wav_path,
+                    "-acodec", "libopus", "-ac", "1", "-b:a", "64k", "-vbr", "off",
+                    "-y", "-loglevel", "error", output_path,
+                ]
+            else:
+                cmd = [ffmpeg, "-i", wav_path, "-y", "-loglevel", "error", output_path]
+            result = subprocess.run(cmd, capture_output=True, timeout=30)
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"ffmpeg conversion failed: "
+                    f"{result.stderr.decode('utf-8', errors='ignore')[:200]}"
+                )
+            os.remove(wav_path)
+        else:
+            os.rename(wav_path, output_path)
+    except Exception:
+        if os.path.exists(wav_path):
+            os.rename(wav_path, output_path)
+        raise
+
+    return output_path
+
+
 def _generate_neutts(text: str, output_path: str, tts_config: Dict[str, Any]) -> str:
     """Generate speech using the local NeuTTS engine.
 
@@ -867,6 +929,10 @@ def text_to_speech_tool(
             logger.info("Generating speech with Google Gemini TTS...")
             _generate_gemini_tts(text, file_str, tts_config)
 
+        elif provider == "kokoro":
+            logger.info("Generating speech with Kokoro (local)...")
+            _generate_kokoro_tts(text, file_str, tts_config)
+
         elif provider == "neutts":
             if not _check_neutts_available():
                 return json.dumps({
@@ -916,7 +982,7 @@ def text_to_speech_tool(
         # Try Opus conversion for Telegram compatibility
         # Edge TTS outputs MP3, NeuTTS outputs WAV — both need ffmpeg conversion
         voice_compatible = False
-        if provider in ("edge", "neutts", "minimax", "xai") and not file_str.endswith(".ogg"):
+        if provider in ("edge", "neutts", "minimax", "xai", "kokoro") and not file_str.endswith(".ogg"):
             opus_path = _convert_to_opus(file_str)
             if opus_path:
                 file_str = opus_path
@@ -1001,6 +1067,11 @@ def check_tts_requirements() -> bool:
         pass
     if _check_neutts_available():
         return True
+    try:
+        from kokoro_onnx import Kokoro  # noqa: F401
+        return True
+    except ImportError:
+        pass
     return False
 
 

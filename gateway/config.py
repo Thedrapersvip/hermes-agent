@@ -552,6 +552,8 @@ def load_gateway_config() -> GatewayConfig:
                         platform_cfg.get("unauthorized_dm_behavior"),
                         gw_data.get("unauthorized_dm_behavior", "pair"),
                     )
+                if "allow_unauthorized_groups" in platform_cfg:
+                    bridged["allow_unauthorized_groups"] = platform_cfg["allow_unauthorized_groups"]
                 if "reply_prefix" in platform_cfg:
                     bridged["reply_prefix"] = platform_cfg["reply_prefix"]
                 if "require_mention" in platform_cfg:
@@ -677,6 +679,8 @@ def load_gateway_config() -> GatewayConfig:
             if isinstance(whatsapp_cfg, dict):
                 if "require_mention" in whatsapp_cfg and not os.getenv("WHATSAPP_REQUIRE_MENTION"):
                     os.environ["WHATSAPP_REQUIRE_MENTION"] = str(whatsapp_cfg["require_mention"]).lower()
+                if "allow_unauthorized_groups" in whatsapp_cfg and not os.getenv("WHATSAPP_ALLOW_UNAUTHORIZED_GROUPS"):
+                    os.environ["WHATSAPP_ALLOW_UNAUTHORIZED_GROUPS"] = str(whatsapp_cfg["allow_unauthorized_groups"]).lower()
                 if "mention_patterns" in whatsapp_cfg and not os.getenv("WHATSAPP_MENTION_PATTERNS"):
                     os.environ["WHATSAPP_MENTION_PATTERNS"] = json.dumps(whatsapp_cfg["mention_patterns"])
                 frc = whatsapp_cfg.get("free_response_chats")

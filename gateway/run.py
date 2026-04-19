@@ -2705,6 +2705,12 @@ class GatewayRunner:
         if self.pairing_store.is_approved(platform_name, user_id):
             return True
 
+        # Optional escape hatch for public group chats while keeping DMs private.
+        # Mention/reply gating still happens at the adapter level; this only decides
+        # whether an unpaired sender in a group is allowed through at all.
+        if self._allow_unauthorized_groups(source):
+            return True
+
         # Check platform-specific and global allowlists
         platform_allowlist = os.getenv(platform_env_map.get(source.platform, ""), "").strip()
         group_allowlist = ""
@@ -2761,6 +2767,47 @@ class GatewayRunner:
         if config and hasattr(config, "get_unauthorized_dm_behavior"):
             return config.get_unauthorized_dm_behavior(platform)
         return "pair"
+
+    def _allow_unauthorized_groups(self, source: SessionSource) -> bool:
+        """Return whether unpaired users may talk in group chats for this platform."""
+        if source.chat_type != "group":
+            return False
+
+        config = getattr(self, "config", None)
+        if config:
+            platform_cfg = getattr(config, "platforms", {}).get(source.platform)
+            if platform_cfg and isinstance(getattr(platform_cfg, "extra", None), dict):
+                value = platform_cfg.extra.get("allow_unauthorized_groups")
+                if value is not None:
+                    return str(value).strip().lower() in ("true", "1", "yes", "on")
+
+        env_map = {
+            Platform.TELEGRAM: "TELEGRAM_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.DISCORD: "DISCORD_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.WHATSAPP: "WHATSAPP_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.SLACK: "SLACK_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.SIGNAL: "SIGNAL_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.EMAIL: "EMAIL_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.SMS: "SMS_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.MATTERMOST: "MATTERMOST_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.MATRIX: "MATRIX_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.DINGTALK: "DINGTALK_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.FEISHU: "FEISHU_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.WECOM: "WECOM_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.WECOM_CALLBACK: "WECOM_CALLBACK_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.WEIXIN: "WEIXIN_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.BLUEBUBBLES: "BLUEBUBBLES_ALLOW_UNAUTHORIZED_GROUPS",
+            Platform.QQBOT: "QQ_ALLOW_UNAUTHORIZED_GROUPS",
+        }
+        raw = os.getenv(env_map.get(source.platform, ""), "").strip()
+        if raw:
+            return raw.lower() in ("true", "1", "yes", "on")
+        return os.getenv("GATEWAY_ALLOW_UNAUTHORIZED_GROUPS", "").strip().lower() in (
+            "true",
+            "1",
+            "yes",
+            "on",
+        )
     
     async def _handle_message(self, event: MessageEvent) -> Optional[str]:
         """

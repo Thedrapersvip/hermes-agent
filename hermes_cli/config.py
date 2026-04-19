@@ -599,6 +599,12 @@ DEFAULT_CONFIG = {
             "model": "neuphonic/neutts-air-q4-gguf",  # HuggingFace model repo
             "device": "cpu",  # cpu, cuda, or mps
         },
+        "kokoro": {
+            "model": "",    # Path to kokoro-v1.0.int8.onnx (empty = ~/Developer/atlas-local/kokoro/)
+            "voices": "",   # Path to voices-v1.0.bin (empty = ~/Developer/atlas-local/kokoro/)
+            "voice": "af_bella",  # af_bella, af_nicole, am_adam, bf_emma, bm_lewis, etc.
+            "lang": "en-us",
+        },
     },
     
     "stt": {

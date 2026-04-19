@@ -170,6 +170,17 @@ SKILLS_GUIDANCE = (
     "Skills that aren't maintained become liabilities."
 )
 
+RAG_GUIDANCE = (
+    "You have a local document knowledge base (rag_search tool) containing the user's "
+    "private business documents, research, and context. "
+    "ALWAYS call rag_search FIRST — before web_search or relying on general knowledge — "
+    "for any question involving: their specific businesses, named people in their network, "
+    "board members, executives, strategy, performance data, exit plans, or any topic "
+    "where they may have shared documents. "
+    "The web cannot access their private documents. rag_search can. "
+    "Use web_search only after rag_search returns no useful results."
+)
+
 TOOL_USE_ENFORCEMENT_GUIDANCE = (
     "# Tool-use enforcement\n"
     "You MUST use your tools to take action — do not describe what you would do "

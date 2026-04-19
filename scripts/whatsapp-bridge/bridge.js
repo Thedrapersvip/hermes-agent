@@ -26,7 +26,7 @@ import path from 'path';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';
 import { randomBytes } from 'crypto';
 import qrcode from 'qrcode-terminal';
-import { matchesAllowedUser, parseAllowedUsers } from './allowlist.js';
+import { parseAllowedUsers, shouldAllowIncomingSender } from './allowlist.js';
 
 // Parse CLI args
 const args = process.argv.slice(2);
@@ -49,6 +49,9 @@ const AUDIO_CACHE_DIR = path.join(process.env.HOME || '~', '.hermes', 'audio_cac
 const PAIR_ONLY = args.includes('--pair-only');
 const WHATSAPP_MODE = getArg('mode', process.env.WHATSAPP_MODE || 'self-chat'); // "bot" or "self-chat"
 const ALLOWED_USERS = parseAllowedUsers(process.env.WHATSAPP_ALLOWED_USERS || '');
+const ALLOW_UNAUTHORIZED_GROUPS = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.WHATSAPP_ALLOW_UNAUTHORIZED_GROUPS || '').toLowerCase(),
+);
 const DEFAULT_REPLY_PREFIX = '⚕ *Hermes Agent*\n────────────\n';
 const REPLY_PREFIX = process.env.WHATSAPP_REPLY_PREFIX === undefined
   ? DEFAULT_REPLY_PREFIX
@@ -228,7 +231,13 @@ async function startSocket() {
       }
 
       // Check allowlist for messages from others (resolve LID ↔ phone aliases)
-      if (!msg.key.fromMe && !matchesAllowedUser(senderId, ALLOWED_USERS, SESSION_DIR)) {
+      if (!msg.key.fromMe && !shouldAllowIncomingSender({
+        senderId,
+        chatId,
+        allowedUsers: ALLOWED_USERS,
+        allowUnauthorizedGroups: ALLOW_UNAUTHORIZED_GROUPS,
+        sessionDir: SESSION_DIR,
+      })) {
         continue;
       }
 

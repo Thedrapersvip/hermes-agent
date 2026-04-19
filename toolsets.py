@@ -29,6 +29,8 @@ from typing import List, Dict, Any, Set, Optional
 # Shared tool list for CLI and all messaging platform toolsets.
 # Edit this once to update all platforms simultaneously.
 _HERMES_CORE_TOOLS = [
+    # Local knowledge base — checked before web for business questions
+    "rag_search", "rag_ingest",
     # Web
     "web_search", "web_extract",
     # Terminal + process management

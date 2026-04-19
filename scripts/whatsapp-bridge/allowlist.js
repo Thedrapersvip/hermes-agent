@@ -82,3 +82,21 @@ export function matchesAllowedUser(senderId, allowedUsers, sessionDir) {
 
   return false;
 }
+
+export function shouldAllowIncomingSender({
+  senderId,
+  chatId,
+  allowedUsers,
+  allowUnauthorizedGroups = false,
+  sessionDir,
+}) {
+  if (matchesAllowedUser(senderId, allowedUsers, sessionDir)) {
+    return true;
+  }
+
+  if (allowUnauthorizedGroups && String(chatId || '').endsWith('@g.us')) {
+    return true;
+  }
+
+  return false;
+}

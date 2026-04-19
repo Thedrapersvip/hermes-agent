@@ -34,7 +34,20 @@ def _clear_auth_env(monkeypatch) -> None:
         "MATRIX_ALLOW_ALL_USERS",
         "DINGTALK_ALLOW_ALL_USERS", "FEISHU_ALLOW_ALL_USERS", "WECOM_ALLOW_ALL_USERS",
         "QQ_ALLOW_ALL_USERS",
+        "TELEGRAM_ALLOW_UNAUTHORIZED_GROUPS",
+        "DISCORD_ALLOW_UNAUTHORIZED_GROUPS",
+        "WHATSAPP_ALLOW_UNAUTHORIZED_GROUPS",
+        "SLACK_ALLOW_UNAUTHORIZED_GROUPS",
+        "SIGNAL_ALLOW_UNAUTHORIZED_GROUPS",
+        "EMAIL_ALLOW_UNAUTHORIZED_GROUPS",
+        "SMS_ALLOW_UNAUTHORIZED_GROUPS",
+        "MATTERMOST_ALLOW_UNAUTHORIZED_GROUPS",
+        "MATRIX_ALLOW_UNAUTHORIZED_GROUPS",
+        "DINGTALK_ALLOW_UNAUTHORIZED_GROUPS", "FEISHU_ALLOW_UNAUTHORIZED_GROUPS",
+        "WECOM_ALLOW_UNAUTHORIZED_GROUPS",
+        "QQ_ALLOW_UNAUTHORIZED_GROUPS",
         "GATEWAY_ALLOW_ALL_USERS",
+        "GATEWAY_ALLOW_UNAUTHORIZED_GROUPS",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -167,6 +180,56 @@ def test_qq_group_allowlist_does_not_authorize_other_groups(monkeypatch):
         chat_id="group-openid-2",
         user_name="tester",
         chat_type="group",
+    )
+
+    assert runner._is_user_authorized(source) is False
+
+
+def test_group_access_override_authorizes_unauthorized_group_users(monkeypatch):
+    _clear_auth_env(monkeypatch)
+    runner, _adapter = _make_runner(
+        Platform.WHATSAPP,
+        GatewayConfig(
+            platforms={
+                Platform.WHATSAPP: PlatformConfig(
+                    enabled=True,
+                    extra={"allow_unauthorized_groups": True},
+                )
+            }
+        ),
+    )
+
+    source = SessionSource(
+        platform=Platform.WHATSAPP,
+        user_id="15551234567@s.whatsapp.net",
+        chat_id="120363001234567890@g.us",
+        user_name="tester",
+        chat_type="group",
+    )
+
+    assert runner._is_user_authorized(source) is True
+
+
+def test_group_access_override_does_not_authorize_private_dms(monkeypatch):
+    _clear_auth_env(monkeypatch)
+    runner, _adapter = _make_runner(
+        Platform.WHATSAPP,
+        GatewayConfig(
+            platforms={
+                Platform.WHATSAPP: PlatformConfig(
+                    enabled=True,
+                    extra={"allow_unauthorized_groups": True},
+                )
+            }
+        ),
+    )
+
+    source = SessionSource(
+        platform=Platform.WHATSAPP,
+        user_id="15551234567@s.whatsapp.net",
+        chat_id="15551234567@s.whatsapp.net",
+        user_name="tester",
+        chat_type="dm",
     )
 
     assert runner._is_user_authorized(source) is False

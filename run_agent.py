@@ -80,7 +80,7 @@ from agent.retry_utils import jittered_backoff
 from agent.error_classifier import classify_api_error, FailoverReason
 from agent.prompt_builder import (
     DEFAULT_AGENT_IDENTITY, PLATFORM_HINTS,
-    MEMORY_GUIDANCE, SESSION_SEARCH_GUIDANCE, SKILLS_GUIDANCE,
+    MEMORY_GUIDANCE, SESSION_SEARCH_GUIDANCE, SKILLS_GUIDANCE, RAG_GUIDANCE,
     build_nous_subscription_prompt,
 )
 from agent.model_metadata import (
@@ -3430,6 +3430,8 @@ class AIAgent:
             tool_guidance.append(SESSION_SEARCH_GUIDANCE)
         if "skill_manage" in self.valid_tool_names:
             tool_guidance.append(SKILLS_GUIDANCE)
+        if "rag_search" in self.valid_tool_names:
+            tool_guidance.append(RAG_GUIDANCE)
         if tool_guidance:
             prompt_parts.append(" ".join(tool_guidance))
 
@@ -8869,6 +8871,7 @@ class AIAgent:
             nous_auth_retry_attempted=False
             thinking_sig_retry_attempted = False
             has_retried_429 = False
+            consecutive_rate_limit_failures = 0
             restart_with_compressed_messages = False
             restart_with_length_continuation = False
 
@@ -9523,6 +9526,7 @@ class AIAgent:
                                 self._vprint(f"{self.log_prefix}   💾 Cache: {cached:,}/{prompt:,} tokens ({hit_pct:.0f}% hit, {written:,} written)")
                     
                     has_retried_429 = False  # Reset on success
+                    consecutive_rate_limit_failures = 0  # Reset on success
                     # Clear Nous rate limit state on successful request —
                     # proves the limit has reset and other sessions can
                     # resume hitting Nous.
@@ -9928,19 +9932,26 @@ class AIAgent:
                         FailoverReason.rate_limit,
                         FailoverReason.billing,
                     )
+                    if is_rate_limited:
+                        consecutive_rate_limit_failures += 1
                     if is_rate_limited and self._fallback_index < len(self._fallback_chain):
                         # Don't eagerly fallback if credential pool rotation may
                         # still recover.  The pool's retry-then-rotate cycle needs
                         # at least one more attempt to fire — jumping to a fallback
                         # provider here short-circuits it.
+                        # Exception: after 3 consecutive rate limit failures the pool
+                        # is clearly exhausted (e.g. shared account-level Codex limit)
+                        # even if individual credentials haven't entered cooldown yet.
                         pool = self._credential_pool
                         pool_may_recover = pool is not None and pool.has_available()
-                        if not pool_may_recover:
+                        pool_truly_exhausted = consecutive_rate_limit_failures >= 3
+                        if not pool_may_recover or pool_truly_exhausted:
                             self._emit_status("⚠️ Rate limited — switching to fallback provider...")
                             if self._try_activate_fallback():
                                 retry_count = 0
                                 compression_attempts = 0
                                 primary_recovery_attempted = False
+                                consecutive_rate_limit_failures = 0
                                 continue
 
                     # ── Nous Portal: record rate limit & skip retries ─────

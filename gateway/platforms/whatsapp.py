@@ -361,6 +361,9 @@ class WhatsAppAdapter(BasePlatformAdapter):
             bridge_env = os.environ.copy()
             if self._reply_prefix is not None:
                 bridge_env["WHATSAPP_REPLY_PREFIX"] = self._reply_prefix
+            allow_unauthorized_groups = self.config.extra.get("allow_unauthorized_groups")
+            if allow_unauthorized_groups is not None:
+                bridge_env["WHATSAPP_ALLOW_UNAUTHORIZED_GROUPS"] = str(allow_unauthorized_groups).lower()
 
             self._bridge_process = subprocess.Popen(
                 [
@@ -765,6 +768,22 @@ class WhatsAppAdapter(BasePlatformAdapter):
     ) -> SendResult:
         """Send a video natively via bridge — plays inline in WhatsApp."""
         return await self._send_media_to_bridge(chat_id, video_path, "video", caption)
+
+    async def send_voice(
+        self,
+        chat_id: str,
+        audio_path: str,
+        caption: Optional[str] = None,
+        reply_to: Optional[str] = None,
+        **kwargs,
+    ) -> SendResult:
+        """Send audio as a native WhatsApp voice note (PTT bubble) via bridge.
+
+        The bridge sets ptt=true for .ogg/.opus files so they appear as
+        playable voice bubbles identical to human voice notes.  Other formats
+        (.mp3, .wav) are sent as audio attachments.
+        """
+        return await self._send_media_to_bridge(chat_id, audio_path, "audio", caption)
 
     async def send_document(
         self,

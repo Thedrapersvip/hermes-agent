@@ -555,6 +555,19 @@ def _run_single_child(
     """
     child_start = time.monotonic()
 
+    # ── Execution receipt ──────────────────────────────────────────
+    _receipt = None
+    try:
+        from tools.execution_receipts import create_receipt, finalize_receipt
+        _child_task_id = getattr(child, 'session_id', '') or ''
+        _receipt = create_receipt(
+            task_id=_child_task_id,
+            execution_path="delegation",
+            metadata={"goal": goal[:200], "task_index": task_index},
+        )
+    except Exception:
+        _receipt = None  # Non-fatal — receipts are best-effort
+
     # Get the progress callback from the child agent
     child_progress_cb = getattr(child, 'tool_progress_callback', None)
 
@@ -727,6 +740,21 @@ def _run_single_child(
             except Exception as e:
                 logger.debug("Progress callback completion failed: %s", e)
 
+        # Finalize execution receipt
+        if _receipt:
+            try:
+                _files = [tc.get("args_bytes") for tc in tool_trace if tc.get("tool") in ("write_file", "patch")]
+                finalize_receipt(
+                    _receipt,
+                    status=status,
+                    duration_seconds=duration,
+                    tool_calls=tool_trace,
+                    summary=summary[:500] if summary else "",
+                    error=entry.get("error", ""),
+                )
+            except Exception:
+                pass  # Non-fatal
+
         return entry
 
     except Exception as exc:
@@ -743,6 +771,19 @@ def _run_single_child(
                 )
             except Exception as e:
                 logger.debug("Progress callback failure relay failed: %s", e)
+
+        # Finalize receipt with error
+        if _receipt:
+            try:
+                finalize_receipt(
+                    _receipt,
+                    status="failed",
+                    duration_seconds=duration,
+                    error=str(exc)[:500],
+                )
+            except Exception:
+                pass
+
         return {
             "task_index": task_index,
             "status": "error",

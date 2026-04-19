@@ -103,6 +103,7 @@ class TestDelegateTierProfiles(unittest.TestCase):
             toolsets=None,
             model=None,
             max_iterations=50,
+            task_count=1,
             parent_agent=parent,
             override_reasoning_effort="high",
         )

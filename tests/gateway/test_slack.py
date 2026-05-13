@@ -149,6 +149,42 @@ class TestAppMentionHandler:
         assert "assistant_thread_context_changed" in registered_events
         assert "/hermes" in registered_commands
 
+    def test_connect_does_not_let_slack_client_oauth_env_disable_single_workspace_token(self):
+        """Slack client OAuth env vars should not make Bolt ignore the bot token."""
+        config = PlatformConfig(enabled=True, token="xoxb-fake")
+        adapter = SlackAdapter(config)
+
+        mock_app = MagicMock()
+        mock_app.event = lambda _event_type: (lambda fn: fn)
+        mock_app.command = lambda _cmd: (lambda fn: fn)
+        mock_web_client = AsyncMock()
+        mock_web_client.auth_test = AsyncMock(return_value={
+            "user_id": "U_BOT",
+            "user": "testbot",
+            "team_id": "T_FAKE",
+            "team": "FakeTeam",
+        })
+
+        def assert_no_oauth_env(**kwargs):
+            assert kwargs["token"] == "xoxb-fake"
+            assert "SLACK_CLIENT_ID" not in os.environ
+            assert "SLACK_CLIENT_SECRET" not in os.environ
+            return mock_app
+
+        with patch.object(_slack_mod, "AsyncApp", side_effect=assert_no_oauth_env), \
+             patch.object(_slack_mod, "AsyncWebClient", return_value=mock_web_client), \
+             patch.object(_slack_mod, "AsyncSocketModeHandler", return_value=MagicMock()), \
+             patch.dict(os.environ, {
+                 "SLACK_APP_TOKEN": "xapp-fake",
+                 "SLACK_CLIENT_ID": "123.456",
+                 "SLACK_CLIENT_SECRET": "secret",
+             }), \
+             patch("gateway.status.acquire_scoped_lock", return_value=(True, None)), \
+             patch("asyncio.create_task"):
+            assert asyncio.run(adapter.connect()) is True
+            assert os.environ["SLACK_CLIENT_ID"] == "123.456"
+            assert os.environ["SLACK_CLIENT_SECRET"] == "secret"
+
 
 class TestSlackConnectCleanup:
     """Regression coverage for failed connect() cleanup."""

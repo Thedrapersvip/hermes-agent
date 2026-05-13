@@ -162,9 +162,24 @@ class SlackAdapter(BasePlatformAdapter):
                 return False
             lock_acquired = True
 
-            # First token is the primary — used for AsyncApp / Socket Mode
+            # First token is the primary — used for AsyncApp / Socket Mode.
+            # Slack Bolt auto-enables OAuth mode whenever SLACK_CLIENT_ID and
+            # SLACK_CLIENT_SECRET are present in the process environment; in
+            # that mode it ignores the explicit single-workspace bot token and
+            # inbound events fail with "AuthorizeResult ... was not found".
+            # Hermes stores client credentials for setup/OAuth flows, but this
+            # adapter uses direct Socket Mode tokens, so hide them only while
+            # constructing the Bolt app and then restore them for other code.
             primary_token = bot_tokens[0]
-            self._app = AsyncApp(token=primary_token)
+            oauth_env = {
+                key: os.environ.pop(key)
+                for key in ("SLACK_CLIENT_ID", "SLACK_CLIENT_SECRET")
+                if key in os.environ
+            }
+            try:
+                self._app = AsyncApp(token=primary_token)
+            finally:
+                os.environ.update(oauth_env)
 
             # Register each bot token and map team_id → client
             for token in bot_tokens:

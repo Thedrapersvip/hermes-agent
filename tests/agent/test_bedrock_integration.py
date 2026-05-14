@@ -263,10 +263,14 @@ class TestPackaging:
         content = toml_path.read_text()
         assert 'bedrock = ["boto3' in content
 
-    def test_bedrock_in_all_extra(self):
+    def test_bedrock_is_not_eager_installed_by_all_extra(self):
         from pathlib import Path
         content = (Path(__file__).parent.parent.parent / "pyproject.toml").read_text()
-        assert '"hermes-agent[bedrock]"' in content
+        # Bedrock remains an opt-in provider extra.  The broad [all] install
+        # intentionally omits provider-specific SDKs so one optional backend
+        # dependency cannot break base installs.
+        all_section = content.split("all = [", 1)[1].split("]", 1)[0]
+        assert '"hermes-agent[bedrock]"' not in all_section
 
 
 # ---------------------------------------------------------------------------

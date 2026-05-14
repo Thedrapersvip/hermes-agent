@@ -13,6 +13,13 @@ from unittest.mock import MagicMock, patch, mock_open
 import pytest
 
 
+@pytest.fixture
+def fake_faster_whisper_module():
+    fake = MagicMock()
+    with patch.dict("sys.modules", {"faster_whisper": fake}):
+        yield fake
+
+
 # ---------------------------------------------------------------------------
 # Provider selection
 # ---------------------------------------------------------------------------
@@ -124,7 +131,7 @@ class TestValidateAudioFile:
 
 class TestTranscribeLocal:
 
-    def test_successful_transcription(self, tmp_path):
+    def test_successful_transcription(self, tmp_path, fake_faster_whisper_module):
         audio_file = tmp_path / "test.ogg"
         audio_file.write_bytes(b"fake audio")
 
@@ -137,8 +144,8 @@ class TestTranscribeLocal:
         mock_model = MagicMock()
         mock_model.transcribe.return_value = ([mock_segment], mock_info)
 
+        fake_faster_whisper_module.WhisperModel = MagicMock(return_value=mock_model)
         with patch("tools.transcription_tools._HAS_FASTER_WHISPER", True), \
-             patch("faster_whisper.WhisperModel", return_value=mock_model), \
              patch("tools.transcription_tools._local_model", None):
             from tools.transcription_tools import _transcribe_local
             result = _transcribe_local(str(audio_file), "base")
@@ -281,7 +288,7 @@ class TestNormalizeLocalModel:
             _normalize_local_model("whisper-1")
         assert any("whisper-1" in r.message for r in caplog.records)
 
-    def test_local_transcribe_normalises_model(self):
+    def test_local_transcribe_normalises_model(self, fake_faster_whisper_module):
         """transcribe_audio with local provider must not pass 'whisper-1' to WhisperModel."""
         import tempfile, os
         from unittest.mock import MagicMock, patch
@@ -292,6 +299,7 @@ class TestNormalizeLocalModel:
         try:
             mock_model = MagicMock()
             mock_model.transcribe.return_value = (iter([]), MagicMock(language="en", duration=1.0))
+            fake_faster_whisper_module.WhisperModel = MagicMock(return_value=mock_model)
             with patch("tools.transcription_tools._HAS_FASTER_WHISPER", True), \
                  patch("tools.transcription_tools._load_stt_config", return_value={
                      "enabled": True,
@@ -299,12 +307,11 @@ class TestNormalizeLocalModel:
                      "local": {"model": "whisper-1"},
                  }), \
                  patch("tools.transcription_tools._local_model", None), \
-                 patch("tools.transcription_tools._local_model_name", None), \
-                 patch("faster_whisper.WhisperModel", return_value=mock_model) as mock_cls:
+                 patch("tools.transcription_tools._local_model_name", None):
                 from tools.transcription_tools import transcribe_audio
                 transcribe_audio(audio_file)
                 # WhisperModel must NOT have been called with "whisper-1"
-                call_args = mock_cls.call_args
+                call_args = fake_faster_whisper_module.WhisperModel.call_args
                 assert call_args is not None
                 assert call_args[0][0] != "whisper-1", (
                     "WhisperModel was called with the cloud-only name 'whisper-1'"

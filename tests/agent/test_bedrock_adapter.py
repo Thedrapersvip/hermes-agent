@@ -18,6 +18,18 @@ from unittest.mock import MagicMock, patch, PropertyMock
 import pytest
 
 
+def _patch_botocore_session(mock_session):
+    """Patch botocore.session even when the optional boto3 extra is absent."""
+    botocore = MagicMock()
+    botocore_session = MagicMock()
+    botocore.session = botocore_session
+    botocore_session.get_session = MagicMock(return_value=mock_session)
+    return patch.dict(
+        "sys.modules",
+        {"botocore": botocore, "botocore.session": botocore_session},
+    )
+
+
 # ---------------------------------------------------------------------------
 # AWS credential detection
 # ---------------------------------------------------------------------------
@@ -117,24 +129,28 @@ class TestResolveBedrocRegion:
 
     def test_defaults_to_us_east_1(self):
         from agent.bedrock_adapter import resolve_bedrock_region
-        from unittest.mock import patch, MagicMock
         mock_session = MagicMock()
         mock_session.get_config_variable.return_value = None
-        with patch("botocore.session.get_session", return_value=mock_session):
+        with _patch_botocore_session(mock_session):
             assert resolve_bedrock_region({}) == "us-east-1"
 
     def test_falls_back_to_botocore_profile_region(self):
         from agent.bedrock_adapter import resolve_bedrock_region
-        from unittest.mock import patch, MagicMock
         mock_session = MagicMock()
         mock_session.get_config_variable.return_value = "eu-central-1"
-        with patch("botocore.session.get_session", return_value=mock_session):
+        with _patch_botocore_session(mock_session):
             assert resolve_bedrock_region({}) == "eu-central-1"
 
     def test_botocore_failure_falls_back_to_us_east_1(self):
         from agent.bedrock_adapter import resolve_bedrock_region
-        from unittest.mock import patch
-        with patch("botocore.session.get_session", side_effect=Exception("no botocore")):
+        botocore = MagicMock()
+        botocore_session = MagicMock()
+        botocore.session = botocore_session
+        botocore_session.get_session = MagicMock(side_effect=Exception("no botocore"))
+        with patch.dict(
+            "sys.modules",
+            {"botocore": botocore, "botocore.session": botocore_session},
+        ):
             assert resolve_bedrock_region({}) == "us-east-1"
 
 

@@ -43,6 +43,18 @@ def _mock_discover(region: str):
     return _EU_MODELS if region.startswith("eu-") else _US_MODELS
 
 
+def _patch_botocore_session(mock_session):
+    """Patch botocore.session even when the optional Bedrock extra is absent."""
+    botocore = MagicMock()
+    botocore_session = MagicMock()
+    botocore.session = botocore_session
+    botocore_session.get_session = MagicMock(return_value=mock_session)
+    return patch.dict(
+        "sys.modules",
+        {"botocore": botocore, "botocore.session": botocore_session},
+    )
+
+
 # ---------------------------------------------------------------------------
 # 1. provider_model_ids("bedrock")
 # ---------------------------------------------------------------------------
@@ -276,7 +288,7 @@ class TestBedrockRegionRouting:
 
         with patch("agent.bedrock_adapter.has_aws_credentials", return_value=True), \
              patch("agent.bedrock_adapter.discover_bedrock_models", side_effect=_mock_discover), \
-             patch("botocore.session.get_session", return_value=mock_session):
+             _patch_botocore_session(mock_session):
             providers = list_authenticated_providers(current_provider="bedrock")
 
         bedrock = next((p for p in providers if p["slug"] == "bedrock"), None)
@@ -310,7 +322,7 @@ class TestBedrockRegionRouting:
         mock_session = MagicMock()
         mock_session.get_config_variable.return_value = "eu-central-1"
 
-        with patch("botocore.session.get_session", return_value=mock_session):
+        with _patch_botocore_session(mock_session):
             region = resolve_bedrock_region()
 
         assert region == "us-west-2", "env var should override botocore profile"

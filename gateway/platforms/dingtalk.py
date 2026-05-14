@@ -34,6 +34,7 @@ import re
 import traceback
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Set
 
 try:
@@ -1388,8 +1389,33 @@ class _IncomingHandler(
             if isinstance(data, str):
                 data = json.loads(data)
 
-            # Parse dict into ChatbotMessage using SDK's from_dict
-            chatbot_msg = ChatbotMessage.from_dict(data)
+            # Parse dict into ChatbotMessage using SDK's from_dict.  The
+            # dingtalk-stream payload shape has drifted across SDK versions;
+            # if a minimal callback dict trips SDK-specific validation, fall
+            # back to a small attribute object so we still ACK and process the
+            # message instead of returning a 500.
+            try:
+                chatbot_msg = ChatbotMessage.from_dict(data)
+            except Exception:
+                if not isinstance(data, dict):
+                    raise
+                chatbot_msg = SimpleNamespace(
+                    message_id=data.get("msgId") or data.get("messageId") or "",
+                    conversation_id=data.get("conversationId") or data.get("conversation_id") or "",
+                    conversation_type=data.get("conversationType") or data.get("conversation_type") or "1",
+                    sender_id=data.get("senderId") or data.get("sender_id") or "",
+                    sender_staff_id=data.get("senderStaffId") or data.get("sender_staff_id") or "",
+                    sender_nick=data.get("senderNick") or data.get("sender_nick") or "",
+                    text=data.get("text") or "",
+                    rich_text=data.get("richText") or data.get("rich_text"),
+                    session_webhook=(
+                        data.get("sessionWebhook")
+                        or data.get("session_webhook")
+                        or ""
+                    ),
+                    is_in_at_list=bool(data.get("isInAtList") or data.get("is_in_at_list")),
+                    at_users=data.get("atUsers") or data.get("at_users") or [],
+                )
 
             # Ensure session_webhook is populated even if the SDK's
             # from_dict() did not map it (field name mismatch across

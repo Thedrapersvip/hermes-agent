@@ -481,9 +481,17 @@ def test_hydrate_bot_identity_populates_self_ids_from_bot_v3_info(monkeypatch):
         feishu_mod,
         "BaseRequest",
         SimpleNamespace(builder=lambda: _FakeRequestBuilder()),
+        raising=False,
     )
-    monkeypatch.setattr(feishu_mod, "HttpMethod", SimpleNamespace(GET="GET"))
-    monkeypatch.setattr(feishu_mod, "AccessTokenType", SimpleNamespace(TENANT="TENANT"))
+    monkeypatch.setattr(
+        feishu_mod, "HttpMethod", SimpleNamespace(GET="GET"), raising=False
+    )
+    monkeypatch.setattr(
+        feishu_mod,
+        "AccessTokenType",
+        SimpleNamespace(TENANT="TENANT"),
+        raising=False,
+    )
 
     adapter = object.__new__(FeishuAdapter)
     adapter._bot_open_id = ""

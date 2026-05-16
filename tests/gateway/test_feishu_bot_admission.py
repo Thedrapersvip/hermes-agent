@@ -456,42 +456,35 @@ def test_hydrate_bot_identity_populates_self_ids_from_bot_v3_info(monkeypatch):
     import asyncio
 
     from gateway.platforms import feishu as feishu_mod
-    from gateway.platforms.feishu import FeishuAdapter
+    FeishuAdapter = feishu_mod.FeishuAdapter
 
-    class _FakeRequestBuilder:
+    class _FakeBaseRequestBuilder:
         def __init__(self):
-            self.values = {}
+            self._request = SimpleNamespace()
 
         def http_method(self, value):
-            self.values["http_method"] = value
+            self._request.http_method = value
             return self
 
         def uri(self, value):
-            self.values["uri"] = value
+            self._request.uri = value
             return self
 
         def token_types(self, value):
-            self.values["token_types"] = value
+            self._request.token_types = value
             return self
 
         def build(self):
-            return SimpleNamespace(**self.values)
+            return self._request
 
     monkeypatch.setattr(
         feishu_mod,
         "BaseRequest",
-        SimpleNamespace(builder=lambda: _FakeRequestBuilder()),
+        SimpleNamespace(builder=lambda: _FakeBaseRequestBuilder()),
         raising=False,
     )
-    monkeypatch.setattr(
-        feishu_mod, "HttpMethod", SimpleNamespace(GET="GET"), raising=False
-    )
-    monkeypatch.setattr(
-        feishu_mod,
-        "AccessTokenType",
-        SimpleNamespace(TENANT="TENANT"),
-        raising=False,
-    )
+    monkeypatch.setattr(feishu_mod, "HttpMethod", SimpleNamespace(GET="GET"), raising=False)
+    monkeypatch.setattr(feishu_mod, "AccessTokenType", SimpleNamespace(TENANT="TENANT"), raising=False)
 
     adapter = object.__new__(FeishuAdapter)
     adapter._bot_open_id = ""

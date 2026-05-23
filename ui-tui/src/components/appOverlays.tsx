@@ -203,6 +203,11 @@ export function FloatingOverlays({
                 </Box>
               )
             })}
+            <Box backgroundColor={theme.color.completionBg} marginTop={1}>
+              <Text color={theme.color.muted} wrap="truncate">
+                {' '}Tab/Shift+Tab or Ctrl+N/P moves · PgUp/PgDn jumps · Enter picks
+              </Text>
+            </Box>
           </Box>
         </FloatBox>
       )}

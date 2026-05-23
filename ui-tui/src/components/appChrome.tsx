@@ -7,6 +7,7 @@ import { $delegationState } from '../app/delegationStore.js'
 import type { IndicatorStyle } from '../app/interfaces.js'
 import { useTurnSelector } from '../app/turnStore.js'
 import { $uiState } from '../app/uiStore.js'
+import { ATLAS_PANE_MODE } from '../config/env.js'
 import { FACES } from '../content/faces.js'
 import { VERBS } from '../content/verbs.js'
 import { fmtDuration } from '../domain/messages.js'
@@ -77,7 +78,7 @@ const renderIndicator = (style: IndicatorStyle, tick: number): IndicatorRender =
 
 function FaceTicker({ color, startedAt }: { color: string; startedAt?: null | number }) {
   const ui = useStore($uiState)
-  const style = ui.indicatorStyle
+  const style = ATLAS_PANE_MODE ? 'unicode' : ui.indicatorStyle
   const [tick, setTick] = useState(() => Math.floor(Math.random() * 1000))
   const [verbTick, setVerbTick] = useState(() => Math.floor(Math.random() * VERBS.length))
   const [now, setNow] = useState(() => Date.now())
@@ -85,14 +86,15 @@ function FaceTicker({ color, startedAt }: { color: string; startedAt?: null | nu
   // Pre-compute cadence + verb-visibility for the active style so an
   // `/indicator` switch re-arms the interval (and skips the verb timer
   // for verb-less styles like `unicode`) without leaving the previous
-  // timer dangling.
-  const { intervalMs, showVerb } = renderIndicator(style, 0)
+  // timer dangling. Atlas pane mode deliberately uses a calm fixed label
+  // instead of cycling "cognitating/ruminating" style verbs.
+  const indicator = renderIndicator(style, 0)
+  const intervalMs = ATLAS_PANE_MODE ? SPINNER_TICK_MS : indicator.intervalMs
+  const showVerb = ATLAS_PANE_MODE ? false : indicator.showVerb
 
   useEffect(() => {
     const glyph = setInterval(() => setTick(n => n + 1), intervalMs)
     const clock = setInterval(() => setNow(Date.now()), 1000)
-    // Verb timer is gated on `showVerb` — `unicode` style hides the verb
-    // entirely, so cycling `verbTick` would be an avoidable re-render.
     const verb = showVerb ? setInterval(() => setVerbTick(n => n + 1), FACE_TICK_MS) : null
 
     return () => {
@@ -107,11 +109,7 @@ function FaceTicker({ color, startedAt }: { color: string; startedAt?: null | nu
 
   const { frame } = renderIndicator(style, tick)
   const verb = VERBS[verbTick % VERBS.length] ?? ''
-  const verbSegment = showVerb ? ` ${padVerb(verb)}` : ''
-  // Leading space keeps a gap between the frame and the duration when the
-  // verb segment is hidden (e.g. `unicode` spinner style).  When the verb
-  // IS shown, its trailing padding already provides the gap, so the extra
-  // space is harmless.
+  const verbSegment = ATLAS_PANE_MODE ? ' working' : showVerb ? ` ${padVerb(verb)}` : ''
   const durationSegment = startedAt ? ` · ${fmtDuration(now - startedAt)}` : ''
 
   return (
@@ -122,6 +120,7 @@ function FaceTicker({ color, startedAt }: { color: string; startedAt?: null | nu
     </Text>
   )
 }
+
 
 function ctxBarColor(pct: number | undefined, t: Theme) {
   if (pct == null) {

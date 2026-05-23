@@ -12,7 +12,8 @@ import type {
   ClarifyRespondResponse,
   ClipboardPasteResponse,
   GatewayEvent,
-  TerminalResizeResponse
+  TerminalResizeResponse,
+  VoiceRecordResponse
 } from '../gatewayTypes.js'
 import { useGitBranch } from '../hooks/useGitBranch.js'
 import { useVirtualHistory } from '../hooks/useVirtualHistory.js'
@@ -36,7 +37,7 @@ import { patchTurnState, useTurnSelector } from './turnStore.js'
 import { $uiState, getUiState, patchUiState } from './uiStore.js'
 import { useComposerState } from './useComposerState.js'
 import { useConfigSync } from './useConfigSync.js'
-import { useInputHandlers } from './useInputHandlers.js'
+import { applyVoiceRecordResponse, useInputHandlers } from './useInputHandlers.js'
 import { useLongRunToolCharms } from './useLongRunToolCharms.js'
 import { useSessionLifecycle } from './useSessionLifecycle.js'
 import { useSubmission } from './useSubmission.js'
@@ -555,6 +556,57 @@ export function useMainApp(gw: GatewayClient) {
     wheelStep: WHEEL_SCROLL_STEP
   })
 
+  const onVoiceToggle = useCallback(() => {
+    const startOrStop = (enabled: boolean) => {
+      if (!enabled) {
+        return
+      }
+
+      const starting = !voiceRecording
+      const action = starting ? 'start' : 'stop'
+
+      // Match the keyboard shortcut path: optimistic feedback first, then
+      // let voice.status / voice.transcript events become the source of truth.
+      if (starting) {
+        setVoiceRecording(true)
+      } else {
+        setVoiceRecording(false)
+        setVoiceProcessing(false)
+      }
+
+      gateway
+        .rpc<VoiceRecordResponse>('voice.record', { action, session_id: getUiState().sid })
+        .then(r => applyVoiceRecordResponse(r, starting, { setProcessing: setVoiceProcessing, setRecording: setVoiceRecording }, sys))
+        .catch((e: Error) => {
+          if (starting) {
+            setVoiceRecording(false)
+          }
+
+          sys(`voice error: ${e.message}`)
+        })
+    }
+
+    if (voiceEnabled) {
+      startOrStop(true)
+      return
+    }
+
+    // Dave's desired UX is ChatGPT-style: press the mic, hear the cue, speak.
+    // So the mic button enables voice mode on first use instead of asking the
+    // user to type `/voice on` before recording.
+    gateway
+      .rpc<{ enabled?: boolean }>('voice.toggle', { action: 'on', session_id: getUiState().sid })
+      .then(r => {
+        if (!r?.enabled) {
+          return
+        }
+
+        setVoiceEnabled(true)
+        startOrStop(true)
+      })
+      .catch((e: Error) => sys(`voice error: ${e.message}`))
+  }, [gateway, sys, voiceEnabled, voiceRecording])
+
   const onEvent = useMemo(
     () =>
       createGatewayEventHandler({
@@ -777,10 +829,11 @@ export function useMainApp(gw: GatewayClient) {
       answerSudo,
       clearSelection,
       onModelSelect,
+      onVoiceToggle,
       resumeById: session.resumeById,
       setStickyPrompt
     }),
-    [answerApproval, answerClarify, answerSecret, answerSudo, clearSelection, onModelSelect, session.resumeById]
+    [answerApproval, answerClarify, answerSecret, answerSudo, clearSelection, onModelSelect, onVoiceToggle, session.resumeById]
   )
 
   const appComposer = useMemo(

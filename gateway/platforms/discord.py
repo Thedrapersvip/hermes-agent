@@ -2707,7 +2707,12 @@ class DiscordAdapter(BasePlatformAdapter):
         Instead, start a background loop that hits the typing endpoint every
         8 seconds (typing indicator lasts ~10s).  The loop is cancelled when
         stop_typing() is called (after the response is sent).
+
+        Set DISCORD_TYPING_INDICATOR=false/off/0/no to disable these typing
+        pings entirely. Dave prefers Discord to stay quiet while Atlas works.
         """
+        if (os.getenv("DISCORD_TYPING_INDICATOR") or "false").strip().lower() in {"0", "false", "off", "no"}:
+            return
         if not self._client:
             return
         # Don't start a duplicate loop

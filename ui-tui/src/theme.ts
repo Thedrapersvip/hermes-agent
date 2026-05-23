@@ -349,6 +349,56 @@ export const LIGHT_THEME: Theme = {
   bannerHero: ''
 }
 
+export const ATLAS_THEME: Theme = {
+  color: {
+    primary: '#EAF6FF',
+    accent: '#63E6BE',
+    border: '#1E4C66',
+    text: '#EAF6FF',
+    muted: '#7FA6B8',
+    completionBg: '#07131C',
+    completionCurrentBg: '#123247',
+    completionMetaBg: '#07131C',
+    completionMetaCurrentBg: '#123247',
+
+    label: '#8BE9D1',
+    ok: '#63E6BE',
+    error: '#FF6B7A',
+    warn: '#FFD166',
+
+    prompt: '#63E6BE',
+    sessionLabel: '#7FA6B8',
+    sessionBorder: '#1E4C66',
+
+    statusBg: '#07131C',
+    statusFg: '#EAF6FF',
+    statusGood: '#63E6BE',
+    statusWarn: '#FFD166',
+    statusBad: '#FF9F43',
+    statusCritical: '#FF6B7A',
+    selectionBg: '#123247',
+
+    diffAdded: 'rgb(205,255,234)',
+    diffRemoved: 'rgb(255,215,220)',
+    diffAddedWord: 'rgb(36,138,61)',
+    diffRemovedWord: 'rgb(207,34,46)',
+    shellDollar: '#6CB6FF'
+  },
+
+  brand: {
+    name: 'Atlas',
+    icon: '◆',
+    prompt: '›',
+    welcome: 'Name the task. Atlas will handle the workstream.',
+    goodbye: 'Atlas pane closed.',
+    tool: '│',
+    helpHeader: 'Atlas commands'
+  },
+
+  bannerLogo: '',
+  bannerHero: ''
+}
+
 const TRUE_RE = /^(?:1|true|yes|on)$/
 const FALSE_RE = /^(?:0|false|no|off)$/
 
@@ -503,10 +553,11 @@ export function normalizeThemeForAnsiLightTerminal(
   return { ...theme, color }
 }
 
-const DEFAULT_LIGHT_MODE = detectLightMode()
+const ATLAS_PANE_MODE = /^(?:1|true|yes|on)$/i.test((process.env.HERMES_TUI_ATLAS_PANE ?? '').trim())
+const DEFAULT_LIGHT_MODE = ATLAS_PANE_MODE ? false : detectLightMode()
 
 export const DEFAULT_THEME: Theme = normalizeThemeForAnsiLightTerminal(
-  DEFAULT_LIGHT_MODE ? LIGHT_THEME : DARK_THEME,
+  ATLAS_PANE_MODE ? ATLAS_THEME : DEFAULT_LIGHT_MODE ? LIGHT_THEME : DARK_THEME,
   process.env,
   DEFAULT_LIGHT_MODE
 )

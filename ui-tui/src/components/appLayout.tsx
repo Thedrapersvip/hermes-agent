@@ -6,7 +6,7 @@ import { useGateway } from '../app/gatewayContext.js'
 import type { AppLayoutProps } from '../app/interfaces.js'
 import { $isBlocked, $overlayState, patchOverlayState } from '../app/overlayStore.js'
 import { $uiState } from '../app/uiStore.js'
-import { INLINE_MODE, SHOW_FPS } from '../config/env.js'
+import { ATLAS_PANE_MODE, ATLAS_PANE_NAME, INLINE_MODE, SHOW_FPS } from '../config/env.js'
 import { FULL_RENDER_TAIL_ITEMS } from '../config/limits.js'
 import { PLACEHOLDER } from '../content/placeholders.js'
 import {
@@ -18,7 +18,7 @@ import {
 import { PerfPane } from '../lib/perfPane.js'
 
 import { AgentsOverlay } from './agentsOverlay.js'
-import { GoodVibesHeart, StatusRule, StickyPromptTracker, TranscriptScrollbar } from './appChrome.js'
+import { StatusRule, StickyPromptTracker, TranscriptScrollbar } from './appChrome.js'
 import { FloatingOverlays, PromptZone } from './appOverlays.js'
 import { Banner, Panel, SessionPanel } from './branding.js'
 import { FpsOverlay } from './fpsOverlay.js'
@@ -49,6 +49,30 @@ const PromptPrefix = memo(function PromptPrefix({
         </Text>
       </Box>
       <Box width={COMPOSER_PROMPT_GAP_WIDTH} />
+    </Box>
+  )
+})
+
+const AtlasIntro = memo(function AtlasIntro({ sid }: { sid: null | string }) {
+  const ui = useStore($uiState)
+  const title = ATLAS_PANE_NAME || 'Task pane'
+  const model = ui.info?.model?.split('/').pop() || 'loading model'
+  const cwd = ui.info?.cwd || process.cwd()
+
+  return (
+    <Box borderColor={ui.theme.color.border} borderStyle="round" flexDirection="column" marginTop={1} paddingX={2} paddingY={1}>
+      <Text bold color={ui.theme.color.text}>
+        <Text color={ui.theme.color.accent}>Atlas</Text> is ready for: {title}
+      </Text>
+      <Text color={ui.theme.color.muted} wrap="truncate-end">
+        Task-driven pane · {model} · {cwd}
+      </Text>
+      {sid && (
+        <Text color={ui.theme.color.muted} wrap="truncate-end">
+          Session {sid}
+        </Text>
+      )}
+      <Text color={ui.theme.color.label}>Type your instruction. Use /help for commands, /quit to close this pane.</Text>
     </Box>
   )
 })
@@ -112,9 +136,15 @@ const TranscriptPane = memo(function TranscriptPane({
 
               {row.msg.kind === 'intro' ? (
                 <Box flexDirection="column" paddingTop={1}>
-                  <Banner t={ui.theme} />
+                  {ATLAS_PANE_MODE ? (
+                    <AtlasIntro sid={ui.sid} />
+                  ) : (
+                    <>
+                      <Banner t={ui.theme} />
 
-                  {row.msg.info && <SessionPanel info={row.msg.info} sid={ui.sid} t={ui.theme} />}
+                      {row.msg.info && <SessionPanel info={row.msg.info} sid={ui.sid} t={ui.theme} />}
+                    </>
+                  )}
                 </Box>
               ) : row.msg.kind === 'panel' && row.msg.panelData ? (
                 <Panel sections={row.msg.panelData.sections} t={ui.theme} title={row.msg.panelData.title} />
@@ -296,6 +326,7 @@ const ComposerPane = memo(function ComposerPane({
               <Box flexGrow={0} flexShrink={0} height={inputHeight} width={inputColumns}>
                 {/* Reserve the transcript scrollbar gutter too so typing never rewraps when the scrollbar column repaints. */}
                 <TextInput
+                  color={ui.theme.color.text}
                   columns={inputColumns}
                   mouseApiRef={inputMouseRef}
                   onChange={composer.updateInput}
@@ -308,7 +339,7 @@ const ComposerPane = memo(function ComposerPane({
               </Box>
 
               <Box position="absolute" right={0}>
-                <GoodVibesHeart t={ui.theme} tick={status.goodVibesTick} />
+                <VoiceMicButton onToggle={actions.onVoiceToggle} voiceLabel={status.voiceLabel} />
               </Box>
             </Box>
           </>
@@ -334,6 +365,27 @@ const AgentsOverlayPane = memo(function AgentsOverlayPane() {
       onClose={() => patchOverlayState({ agents: false, agentsInitialHistoryIndex: 0 })}
       t={ui.theme}
     />
+  )
+})
+
+const VoiceMicButton = memo(function VoiceMicButton({
+  onToggle,
+  voiceLabel
+}: {
+  onToggle: () => void
+  voiceLabel: string
+}) {
+  const ui = useStore($uiState)
+  const recording = voiceLabel.startsWith('●')
+  const processing = voiceLabel.startsWith('◉')
+  const enabled = voiceLabel.includes('on') || recording || processing
+  const color = recording ? ui.theme.color.error : processing ? ui.theme.color.warn : enabled ? ui.theme.color.accent : ui.theme.color.muted
+  const glyph = recording ? '● 🎙' : processing ? '◉ 🎙' : '🎙'
+
+  return (
+    <Box onClick={onToggle} onMouseDown={(e: { stopImmediatePropagation?: () => void }) => e.stopImmediatePropagation?.()}>
+      <Text color={color}>{glyph}</Text>
+    </Box>
   )
 })
 
@@ -371,6 +423,37 @@ const StatusRulePane = memo(function StatusRulePane({
   )
 })
 
+const AtlasPaneHeader = memo(function AtlasPaneHeader() {
+  const ui = useStore($uiState)
+  const title = ATLAS_PANE_NAME || 'Task pane'
+  const model = ui.info?.model?.split('/').pop() || 'model loading'
+  const state = ui.busy ? 'working' : ui.status || 'ready'
+
+  return (
+    <Box
+      borderColor={ui.theme.color.border}
+      borderStyle="round"
+      flexShrink={0}
+      justifyContent="space-between"
+      marginX={1}
+      marginTop={1}
+      paddingX={2}
+    >
+      <Text bold color={ui.theme.color.text} wrap="truncate-end">
+        <Text color={ui.theme.color.accent}>Atlas</Text>
+        <Text color={ui.theme.color.muted}> · </Text>
+        {title}
+      </Text>
+      <Text color={ui.theme.color.muted} wrap="truncate-start">
+        <Text color={ui.busy ? ui.theme.color.warn : ui.theme.color.ok}>● </Text>
+        {state}
+        <Text color={ui.theme.color.border}> │ </Text>
+        {model}
+      </Text>
+    </Box>
+  )
+})
+
 export const AppLayout = memo(function AppLayout({
   actions,
   composer,
@@ -391,6 +474,7 @@ export const AppLayout = memo(function AppLayout({
   return (
     <Shell {...shellProps}>
       <Box flexDirection="column" flexGrow={1}>
+        {ATLAS_PANE_MODE && <AtlasPaneHeader />}
         <Box flexDirection="row" flexGrow={1}>
           {overlay.agents ? (
             <PerfPane id="agents">

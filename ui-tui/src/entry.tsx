@@ -9,6 +9,7 @@ import { GatewayClient } from './gatewayClient.js'
 import { setupGracefulExit } from './lib/gracefulExit.js'
 import { formatBytes, type HeapDumpResult, performHeapDump } from './lib/memory.js'
 import { type MemorySnapshot, startMemoryMonitor } from './lib/memoryMonitor.js'
+import { registerHerdrAtlasPaneFromEnv } from './lib/herdrRegister.js'
 import { openExternalUrl } from './lib/openExternalUrl.js'
 import { resetTerminalModes } from './lib/terminalModes.js'
 
@@ -20,6 +21,7 @@ if (!process.stdin.isTTY) {
 // Start from a clean slate. If a previous TUI crashed or was kill -9'd, the
 // terminal tab can still have mouse/focus/paste modes enabled.
 resetTerminalModes()
+void registerHerdrAtlasPaneFromEnv()
 
 // Clear visible screen + scrollback buffer. Without this, tmux may retain
 // stale TUI output in its scrollback buffer from the previous session,

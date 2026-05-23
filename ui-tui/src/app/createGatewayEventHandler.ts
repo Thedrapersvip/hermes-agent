@@ -1,4 +1,4 @@
-import { STARTUP_IMAGE, STARTUP_QUERY } from '../config/env.js'
+import { ATLAS_PANE_MODE, STARTUP_IMAGE, STARTUP_QUERY } from '../config/env.js'
 import { STREAM_BATCH_MS } from '../config/timing.js'
 import { SETUP_REQUIRED_TITLE, buildSetupRequiredSections } from '../content/setup.js'
 import type {
@@ -12,7 +12,7 @@ import type {
 import { rpcErrorMessage } from '../lib/rpc.js'
 import { topLevelSubagents } from '../lib/subagentTree.js'
 import { formatToolCall, stripAnsi } from '../lib/text.js'
-import { fromSkin } from '../theme.js'
+import { ATLAS_THEME, fromSkin } from '../theme.js'
 import type { Msg, SubagentProgress, SubagentStatus } from '../types.js'
 
 import { applyDelegationStatus, getDelegationState } from './delegationStore.js'
@@ -27,14 +27,16 @@ const statusFromBusy = () => (getUiState().busy ? 'running…' : 'ready')
 
 const applySkin = (s: GatewaySkin) =>
   patchUiState({
-    theme: fromSkin(
-      s.colors ?? {},
-      s.branding ?? {},
-      s.banner_logo ?? '',
-      s.banner_hero ?? '',
-      s.tool_prefix ?? '',
-      s.help_header ?? ''
-    )
+    theme: ATLAS_PANE_MODE
+      ? ATLAS_THEME
+      : fromSkin(
+          s.colors ?? {},
+          s.branding ?? {},
+          s.banner_logo ?? '',
+          s.banner_hero ?? '',
+          s.tool_prefix ?? '',
+          s.help_header ?? ''
+        )
   })
 
 const dropBgTask = (taskId: string) =>

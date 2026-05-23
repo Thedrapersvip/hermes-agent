@@ -352,7 +352,8 @@ export function TextInput({
   mouseApiRef,
   voiceRecordKey = DEFAULT_VOICE_RECORD_KEY,
   placeholder = '',
-  focus = true
+  focus = true,
+  color
 }: TextInputProps) {
   const [cur, setCur] = useState(value.length)
   const [sel, setSel] = useState<null | { end: number; start: number }>(null)
@@ -1131,7 +1132,7 @@ export function TextInput({
       ref={boxRef}
       width={columns}
     >
-      <Text wrap="wrap">{rendered}</Text>
+      <Text color={color} wrap="wrap">{rendered}</Text>
     </Box>
   )
 }
@@ -1152,6 +1153,7 @@ export interface PasteEvent {
 }
 
 interface TextInputProps {
+  color?: string
   columns?: number
   focus?: boolean
   mask?: string

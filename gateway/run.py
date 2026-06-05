@@ -1040,6 +1040,8 @@ from gateway.platforms.base import (
 from gateway.restart import (
     DEFAULT_GATEWAY_RESTART_DRAIN_TIMEOUT,
     GATEWAY_SERVICE_RESTART_EXIT_CODE,
+    gateway_restart_approved,
+    gateway_restart_guard_message,
     parse_restart_drain_timeout,
 )
 
@@ -10036,6 +10038,16 @@ class GatewayRunner:
             if count:
                 return t("gateway.draining", count=count)
             return EphemeralReply(t("gateway.restart.in_progress"))
+
+        raw_args = event.get_command_args().strip().lower()
+        approved = raw_args in {"approved", "approve", "--approved", "dave-approved"}
+        if not gateway_restart_approved(approved=approved):
+            return EphemeralReply(
+                gateway_restart_guard_message(
+                    action="gateway restart requested by /restart",
+                    approval_hint="send `/restart approved` after Dave approves the cutover",
+                )
+            )
 
         # Save the requester's routing info so the new gateway process can
         # notify them once it comes back online.

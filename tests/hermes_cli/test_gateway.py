@@ -7,6 +7,62 @@ from unittest.mock import patch, call
 import pytest
 
 import hermes_cli.gateway as gateway
+from gateway.restart import (
+    GATEWAY_RESTART_APPROVAL_ENV,
+    gateway_restart_approved,
+    gateway_restart_guard_message,
+)
+
+
+def test_gateway_restart_approval_helper_requires_explicit_signal():
+    assert gateway_restart_approved(env={}) is False
+    assert gateway_restart_approved(env={GATEWAY_RESTART_APPROVAL_ENV: "no"}) is False
+    assert gateway_restart_approved(env={GATEWAY_RESTART_APPROVAL_ENV: "approved"}) is True
+    assert gateway_restart_approved(approved=True, env={}) is True
+
+
+def test_gateway_restart_guard_message_is_operator_visible():
+    message = gateway_restart_guard_message(action="gateway restart required after update")
+    assert "restart-required-but-not-applied" in message
+    assert "No gateway restart/reload was performed" in message
+    assert "explicit Dave approval" in message
+
+
+def test_gateway_restart_without_approval_reports_without_mutation(monkeypatch, capsys):
+    dispatched = []
+    monkeypatch.delenv(GATEWAY_RESTART_APPROVAL_ENV, raising=False)
+    monkeypatch.setattr(
+        gateway,
+        "_dispatch_via_service_manager_if_s6",
+        lambda action: dispatched.append(action) or False,
+    )
+
+    gateway.gateway_command(
+        SimpleNamespace(gateway_command="restart", system=False, all=False, approved=False)
+    )
+
+    out = capsys.readouterr().out
+    assert "restart-required-but-not-applied" in out
+    assert "hermes gateway restart --approved" in out
+    assert dispatched == []
+
+
+def test_gateway_restart_with_approval_can_reach_restart_path(monkeypatch, capsys):
+    dispatched = []
+    monkeypatch.delenv(GATEWAY_RESTART_APPROVAL_ENV, raising=False)
+    monkeypatch.setattr(
+        gateway,
+        "_dispatch_via_service_manager_if_s6",
+        lambda action: dispatched.append(action) or True,
+    )
+
+    gateway.gateway_command(
+        SimpleNamespace(gateway_command="restart", system=False, all=False, approved=True)
+    )
+
+    out = capsys.readouterr().out
+    assert "restart-required-but-not-applied" not in out
+    assert dispatched == ["restart"]
 
 
 def _install_fake_gateway_run(monkeypatch, start_gateway):
@@ -305,7 +361,7 @@ def test_gateway_restart_on_windows_without_service_uses_detached_backend(monkey
         lambda: pytest.fail("Windows restart must not use generic manual stop fallback"),
     )
 
-    args = SimpleNamespace(gateway_command="restart", system=False, all=False)
+    args = SimpleNamespace(gateway_command="restart", system=False, all=False, approved=True)
     gateway.gateway_command(args)
 
     assert calls == ["restart"]
@@ -330,7 +386,7 @@ def test_gateway_restart_on_windows_preserves_failure_fallback(monkeypatch):
     monkeypatch.setattr(gateway, "_wait_for_gateway_exit", lambda *args, **kwargs: calls.append("wait"))
     monkeypatch.setattr(gateway, "run_gateway", lambda *args, **kwargs: calls.append("run"))
 
-    args = SimpleNamespace(gateway_command="restart", system=False, all=False)
+    args = SimpleNamespace(gateway_command="restart", system=False, all=False, approved=True)
     gateway.gateway_command(args)
 
     assert calls == ["restart", "stop", "wait", "run"]

@@ -9540,7 +9540,31 @@ def _cmd_update_impl(args, gateway_mode: bool):
 
         # Auto-restart ALL gateways after update.
         # The code update (git pull) is shared across all profiles, so every
-        # running gateway needs restarting to pick up the new code.
+        # running gateway needs restarting to pick up the new code. Guard that
+        # live mutation by default: report the required restart but do not apply
+        # it until Dave explicitly approves the disruption.
+        try:
+            import importlib
+            _restart_guard = importlib.import_module("gateway.restart")
+            if not _restart_guard.gateway_restart_approved(
+                approved=getattr(args, "approve_gateway_restart", False)
+            ):
+                print()
+                print(
+                    _restart_guard.gateway_restart_guard_message(
+                        action="gateway restart required after Hermes update",
+                        approval_hint="run `hermes gateway restart --approved` when Dave approves the cutover",
+                    )
+                )
+                return
+        except Exception as e:
+            logger.debug("Gateway restart guard check failed; refusing auto-restart: %s", e)
+            print()
+            print(
+                "restart-required-but-not-applied: gateway restart required after Hermes update, "
+                "but the approval guard could not be verified. No gateway restart/reload was performed."
+            )
+            return
         try:
             from hermes_cli.gateway import (
                 is_macos,
@@ -11006,7 +11030,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "dump", "fallback", "gateway", "hooks", "import", "insights",
         "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate",
         "model", "pairing", "plugins", "portal", "postinstall", "profile", "proxy",
-        "send", "sessions", "setup",
+        "readiness", "send", "sessions", "setup",
         "skills", "slack", "status", "tools", "uninstall", "update",
         "version", "webhook", "whatsapp", "chat", "secrets", "security",
         # Help-ish invocations — plugin commands not being listed in
@@ -11554,6 +11578,11 @@ def main():
         "--all",
         action="store_true",
         help="Kill ALL gateway processes across all profiles before restarting",
+    )
+    gateway_restart.add_argument(
+        "--approved",
+        action="store_true",
+        help="Confirm Dave explicitly approved applying this live gateway restart/reload",
     )
 
     # gateway status
@@ -13753,6 +13782,12 @@ Examples:
         default=False,
         help="Windows: proceed with the update even when another hermes.exe is detected. The concurrent process will likely cause WinError 32 warnings and may leave a reboot-deferred .exe replacement.",
     )
+    update_parser.add_argument(
+        "--approve-gateway-restart",
+        action="store_true",
+        default=False,
+        help="After updating, apply the live gateway restart/reload only when Dave explicitly approved the cutover",
+    )
     update_parser.set_defaults(func=cmd_update)
 
     # =========================================================================
@@ -14163,6 +14198,47 @@ Examples:
         help="Filter by component: gateway, agent, tools, cli, cron",
     )
     logs_parser.set_defaults(func=cmd_logs)
+
+    # =========================================================================
+    # readiness command
+    # =========================================================================
+    readiness_parser = subparsers.add_parser(
+        "readiness",
+        help="Run non-mutating Hermes dashboard/cockpit readiness checks",
+        description=(
+            "Check Hermes/Atlas dashboard and cockpit readiness without starting, "
+            "stopping, restarting, reloading, or writing live gateway state."
+        ),
+    )
+    readiness_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Dashboard host to probe (default 127.0.0.1)",
+    )
+    readiness_parser.add_argument(
+        "--port",
+        type=int,
+        default=9119,
+        help="Dashboard port to probe (default 9119)",
+    )
+    readiness_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON instead of text",
+    )
+    readiness_parser.add_argument(
+        "--strict-warnings",
+        action="store_true",
+        help="Exit 2 when warnings are present (default: warnings exit 0)",
+    )
+    readiness_parser.set_defaults(
+        func=lambda args: sys.exit(
+            __import__(
+                "hermes_cli.readiness",
+                fromlist=["run_readiness"],
+            ).run_readiness(args)
+        )
+    )
 
     # =========================================================================
     # Parse and execute

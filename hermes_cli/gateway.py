@@ -21,6 +21,8 @@ from gateway.status import terminate_pid
 from gateway.restart import (
     DEFAULT_GATEWAY_RESTART_DRAIN_TIMEOUT,
     GATEWAY_SERVICE_RESTART_EXIT_CODE,
+    gateway_restart_approved,
+    gateway_restart_guard_message,
     parse_restart_drain_timeout,
 )
 from hermes_cli.config import (
@@ -2874,10 +2876,7 @@ def generate_launchd_plist() -> str:
     <true/>
     
     <key>KeepAlive</key>
-    <dict>
-        <key>SuccessfulExit</key>
-        <false/>
-    </dict>
+    <true/>
     
     <key>StandardOutPath</key>
     <string>{log_dir}/gateway.log</string>
@@ -5481,6 +5480,18 @@ def _gateway_command_inner(args):
                 print(f"✓ Stopped {get_service_name()} service")
     
     elif subcmd == "restart":
+        # Restart/reload is a live comms-bus mutation. Default to dry-run/reporting
+        # unless the operator explicitly confirms Dave approved this disruption.
+        approved = getattr(args, "approved", False)
+        if not gateway_restart_approved(approved=approved):
+            print(
+                gateway_restart_guard_message(
+                    action="gateway restart requested by `hermes gateway restart`",
+                    approval_hint="re-run `hermes gateway restart --approved` or set HERMES_GATEWAY_RESTART_APPROVED=approved for this one command",
+                )
+            )
+            return
+
         # Try service first, fall back to killing and restarting
         service_available = False
         system = getattr(args, 'system', False)

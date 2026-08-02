@@ -144,6 +144,24 @@ def _expand_acp_enabled_toolsets(
     return expanded
 
 
+def _configured_acp_toolsets(config: Dict[str, Any]) -> List[str]:
+    """Return an explicit ACP toolset override, or the safe ACP default.
+
+    ACP historically hard-coded ``hermes-acp`` even when the active Hermes
+    profile explicitly configured ``platform_toolsets.acp``.  That prevented
+    transport hosts such as Buzz from running the same profile/tool surface as
+    another Hermes platform.  Keep the restricted editor default, but honor a
+    deliberate list in the active profile.
+    """
+    platform_toolsets = config.get("platform_toolsets") or {}
+    configured = platform_toolsets.get("acp") if isinstance(platform_toolsets, dict) else None
+    if isinstance(configured, list):
+        normalized = [str(name).strip() for name in configured if str(name).strip()]
+        if normalized:
+            return normalized
+    return ["hermes-acp"]
+
+
 def _clear_task_cwd(task_id: str) -> None:
     """Remove task-specific cwd overrides for an ACP session."""
     if not task_id:
@@ -623,7 +641,7 @@ class SessionManager:
         kwargs = {
             "platform": "acp",
             "enabled_toolsets": _expand_acp_enabled_toolsets(
-                ["hermes-acp"],
+                _configured_acp_toolsets(config),
                 mcp_server_names=configured_mcp_servers,
             ),
             "quiet_mode": True,

@@ -18,6 +18,7 @@ class FakeAgent:
         self.valid_tool_names = set()
         self.steers = []
         self.runs = []
+        self.stream_delta_callback = None
 
     def steer(self, text):
         self.steers.append(text)
@@ -114,6 +115,56 @@ def test_acp_real_agent_gets_session_db_for_recall(monkeypatch):
     assert captured["session_id"] == "acp-session"
 
 
+def test_acp_real_agent_honors_explicit_profile_toolsets(monkeypatch):
+    """Buzz can opt ACP into the active profile's full platform tool surface."""
+    captured = {}
+    sentinel_db = NoopDb()
+
+    class CapturingAgent:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    def mod(name, **attrs):
+        module = ModuleType(name)
+        for key, value in attrs.items():
+            setattr(module, key, value)
+        return module
+
+    monkeypatch.setitem(sys.modules, "run_agent", mod("run_agent", AIAgent=CapturingAgent))
+    monkeypatch.setitem(
+        sys.modules,
+        "hermes_cli.config",
+        mod(
+            "hermes_cli.config",
+            load_config=lambda: {
+                "model": {"default": "m", "provider": "p"},
+                "platform_toolsets": {"acp": ["hermes-discord"]},
+                "mcp_servers": {"atlas-shopping": {"enabled": True}},
+            },
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "hermes_cli.runtime_provider",
+        mod(
+            "hermes_cli.runtime_provider",
+            resolve_runtime_provider=lambda **_kwargs: {
+                "provider": "p",
+                "api_mode": "chat_completions",
+                "base_url": "u",
+                "api_key": "k",
+                "command": None,
+                "args": [],
+            },
+        ),
+    )
+
+    manager = SessionManager(db=sentinel_db)
+    manager._make_agent(session_id="buzz-atlas", cwd=".")
+
+    assert captured["enabled_toolsets"] == ["hermes-discord", "mcp-atlas-shopping"]
+
+
 @pytest.mark.asyncio
 async def test_acp_steer_slash_command_injects_into_running_agent():
     acp_agent, state, fake, _conn = make_agent_and_state()
@@ -196,3 +247,32 @@ async def test_acp_prompt_drains_queued_turns_after_current_run():
     assert state.queued_prompts == []
     agent_messages = [u for _sid, u in conn.updates if getattr(u, "session_update", None) == "agent_message_chunk"]
     assert len(agent_messages) >= 2
+
+
+@pytest.mark.asyncio
+async def test_acp_force_final_response_env_emits_final_after_stream(monkeypatch):
+    """Compatibility clients can request one final full-text update after streaming."""
+    acp_agent, state, fake, conn = make_agent_and_state()
+    original_run = fake.run_conversation
+
+    def streaming_run(**kwargs):
+        result = original_run(**kwargs)
+        assert fake.stream_delta_callback is not None
+        fake.stream_delta_callback(result["final_response"])
+        return result
+
+    fake.run_conversation = streaming_run
+    monkeypatch.setenv("HERMES_ACP_FORCE_FINAL_RESPONSE", "1")
+
+    response = await acp_agent.prompt(
+        session_id=state.session_id,
+        prompt=[TextContentBlock(type="text", text="health check")],
+    )
+
+    assert response.stop_reason == "end_turn"
+    agent_messages = [
+        update
+        for _session_id, update in conn.updates
+        if getattr(update, "session_update", None) == "agent_message_chunk"
+    ]
+    assert len(agent_messages) == 2

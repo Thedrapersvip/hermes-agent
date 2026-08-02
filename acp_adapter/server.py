@@ -1643,6 +1643,23 @@ class HermesACPAgent(acp.Agent):
                 )
             except Exception:
                 logger.debug("Failed to auto-title ACP session %s", session_id, exc_info=True)
+        if final_response and not suppress_interrupt_response:
+            try:
+                from acp_adapter.buzz_transport import maybe_publish_buzz_final_response
+
+                await maybe_publish_buzz_final_response(
+                    user_text=user_text,
+                    final_response=final_response,
+                )
+            except Exception:
+                # ACP completion remains valid even when an optional host
+                # transport fails, but log it loudly: Buzz users otherwise see
+                # a successful model turn with no visible channel reply.
+                logger.exception(
+                    "Failed to publish ACP final response through Buzz for session %s",
+                    session_id,
+                )
+
         if (
             final_response
             and conn

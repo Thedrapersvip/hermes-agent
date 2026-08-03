@@ -183,6 +183,7 @@ def test_banner_warns_on_pip_install(tmp_path):
     (hh / ".install_method").write_text("pip\n")
 
     with patch("hermes_cli.config.get_hermes_home", return_value=hh), \
+         patch("hermes_cli.config.get_project_root", return_value=hh), \
          patch("hermes_constants.get_hermes_home", return_value=hh):
         buf = io.StringIO()
         # Wide console so the warning isn't wrapped across lines in the panel.
@@ -209,6 +210,7 @@ def test_banner_warns_on_homebrew_install(tmp_path):
     (hh / ".install_method").write_text("homebrew\n")
 
     with patch("hermes_cli.config.get_hermes_home", return_value=hh), \
+         patch("hermes_cli.config.get_project_root", return_value=hh), \
          patch("hermes_constants.get_hermes_home", return_value=hh):
         buf = io.StringIO()
         console = Console(file=buf, width=400, force_terminal=False, color_system=None)
@@ -235,6 +237,7 @@ def test_banner_no_pip_warning_on_git_install(tmp_path):
     (hh / ".install_method").write_text("git\n")
 
     with patch("hermes_cli.config.get_hermes_home", return_value=hh), \
+         patch("hermes_cli.config.get_project_root", return_value=hh), \
          patch("hermes_constants.get_hermes_home", return_value=hh):
         buf = io.StringIO()
         console = Console(file=buf, width=400, force_terminal=False, color_system=None)
